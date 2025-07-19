@@ -7,6 +7,12 @@ const (
 	StairSpiked  = "spiked"
 	StairReverse = "reverse" // reverse polarity stairs
 	StairSuper   = "super"   // super stair
+	// Power-up and collectible stairs
+	StairSlowTime = "slowtime"   // slows time for next N stairs
+	StairDouble   = "double"     // double points for next N stairs
+	StairShield   = "shield"     // protects from next hazard
+	StairCoin     = "coin"       // collectible coin
+	StairGem      = "gem"        // collectible gem
 )
 
 // Stair represents a stair in the Endless Stairs game.
@@ -51,6 +57,41 @@ func (s *Stair) LeftRender() []string {
 			"[***] / \\ ",
 			"     [___]",
 		}
+	case StairSlowTime:
+		return []string{
+			"       O  ",
+			"      /|\\ ",
+			"[SLOW] / \\ ",
+			"     [___]",
+		}
+	case StairDouble:
+		return []string{
+			"       O  ",
+			"      /|\\ ",
+			"[2X!!] / \\ ",
+			"     [___]",
+		}
+	case StairShield:
+		return []string{
+			"       O  ",
+			"      /|\\ ",
+			"[SHLD] / \\ ",
+			"     [___]",
+		}
+	case StairCoin:
+		return []string{
+			"       O  ",
+			"      /|\\ ",
+			"[ $ ] / \\ ",
+			"     [___]",
+		}
+	case StairGem:
+		return []string{
+			"       O  ",
+			"      /|\\ ",
+			"[<>] / \\ ",
+			"     [___]",
+		}
 	default:
 		return []string{
 			"       O  ",
@@ -90,6 +131,41 @@ func (s *Stair) RightRender() []string {
 			"      O        ",
 			"     /|\\       ",
 			"     / \\ [***]",
+			"    [___]      ",
+		}
+	case StairSlowTime:
+		return []string{
+			"      O        ",
+			"     /|\\       ",
+			"     / \\ [SLOW]",
+			"    [___]      ",
+		}
+	case StairDouble:
+		return []string{
+			"      O        ",
+			"     /|\\       ",
+			"     / \\ [2X!!]",
+			"    [___]      ",
+		}
+	case StairShield:
+		return []string{
+			"      O        ",
+			"     /|\\       ",
+			"     / \\ [SHLD]",
+			"    [___]      ",
+		}
+	case StairCoin:
+		return []string{
+			"      O        ",
+			"     /|\\       ",
+			"     / \\ [ $ ]",
+			"    [___]      ",
+		}
+	case StairGem:
+		return []string{
+			"      O        ",
+			"     /|\\       ",
+			"     / \\ [<>]",
 			"    [___]      ",
 		}
 	default:

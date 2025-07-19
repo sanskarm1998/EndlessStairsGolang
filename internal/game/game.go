@@ -67,6 +67,13 @@ type Game struct {
 	Input       InputProvider                // Handles input abstraction
 	Output      OutputProvider               // Handles output abstraction
 	Leaderboard leaderboard.LeaderboardStore // Leaderboard storage
+
+	// Power-up and collectible state
+	HasShield   bool
+	DoublePointsTurns int
+	SlowTimeTurns int
+	Coins       int
+	Gems        int
 }
 
 // NewGame creates a new Game instance with default IO and leaderboard file storage.
@@ -107,11 +114,26 @@ func (g *Game) StartGame() {
 
 	for {
 		timeLimit := getTimeLimit(g.Player.Score)
+		if g.SlowTimeTurns > 0 {
+			timeLimit = time.Duration(float64(timeLimit) * 1.5)
+		}
 		clearScreen()
+		// Print score, coins, gems, and time at the top
+		g.Output.Printf("Score: %d | Coins: %d | Gems: %d | Time: %.1fs\n", g.Player.Score, g.Coins, g.Gems, timeLimit.Seconds())
+		if g.HasShield {
+			g.Output.Printf("[SHIELD ACTIVE] ")
+		}
+		if g.DoublePointsTurns > 0 {
+			g.Output.Printf("[DOUBLE POINTS: %d] ", g.DoublePointsTurns)
+		}
+		if g.SlowTimeTurns > 0 {
+			g.Output.Printf("[SLOW TIME: %d] ", g.SlowTimeTurns)
+		}
+		g.Output.Println()
 		g.Output.Println("Endless Stairs! (Use ←/→ arrows or l/r keys)")
 
 		// Generate the next stair and its direction
-		nextStair, nextDir, nextStairLines := generateNextStair()
+		nextStair, nextDir, nextStairLines := generateNextStairWithPowerups()
 		// If falling stair, halve the time limit but not below 0.9 seconds
 		if nextStair.Type == stair.StairFalling {
 			half := timeLimit / 2
@@ -131,7 +153,7 @@ func (g *Game) StartGame() {
 		frame := g.renderFrame(frameHeight, blankLine, nextStairLines)
 		g.printFrame(frame)
 
-		g.Output.Printf("\nScore: %d\n", g.Player.Score)
+		// Remove old score/time print from here
 		g.Output.Printf("You have %.1f seconds to choose!\n", timeLimit.Seconds())
 		g.Output.Printf("Jump left or right? (l/r): ")
 
@@ -153,24 +175,67 @@ func (g *Game) StartGame() {
 		if move == nextDir {
 			switch nextStair.Type {
 			case stair.StairFalling:
-				g.Output.Println("Oh no! The stair collapsed! You barely made it!")
-				time.Sleep(400 * time.Millisecond)
-				// Do not increase score, do not end game
-			case stair.StairSpiked:
-				if g.Player.Score > 0 {
-					g.Player.Score--
+				if g.HasShield {
+					g.Output.Println("Shield protected you from falling!")
+					g.HasShield = false
+				} else {
+					g.Output.Println("Oh no! The stair collapsed! You barely made it!")
+					time.Sleep(400 * time.Millisecond)
+					// Do not increase score, do not end game
 				}
-				g.Output.Println("Ouch! You landed on spiked stairs! Score -1.")
-				time.Sleep(400 * time.Millisecond)
-				// Continue the game
+			case stair.StairSpiked:
+				if g.HasShield {
+					g.Output.Println("Shield protected you from spikes!")
+					g.HasShield = false
+				} else {
+					if g.Player.Score > 0 {
+						g.Player.Score--
+					}
+					g.Output.Println("Ouch! You landed on spiked stairs! Score -1.")
+					time.Sleep(400 * time.Millisecond)
+				}
 			case stair.StairSuper:
-				g.Player.Score += 5
-				g.Output.Println("Super stair! +5 points!")
+				points := 5
+				if g.DoublePointsTurns > 0 {
+					points *= 2
+				}
+				g.Player.Score += points
+				g.Output.Printf("Super stair! +%d points!\n", points)
 				time.Sleep(400 * time.Millisecond)
-			default:
-				g.Player.Score++
-				g.Output.Println("Good jump!")
+			case stair.StairSlowTime:
+				g.SlowTimeTurns = 5
+				g.Output.Println("Slow time activated for 5 stairs!")
+				time.Sleep(400 * time.Millisecond)
+			case stair.StairDouble:
+				g.DoublePointsTurns = 5
+				g.Output.Println("Double points for 5 stairs!")
+				time.Sleep(400 * time.Millisecond)
+			case stair.StairShield:
+				g.HasShield = true
+				g.Output.Println("Shield acquired! Protects from next hazard.")
+				time.Sleep(400 * time.Millisecond)
+			case stair.StairCoin:
+				g.Coins++
+				g.Output.Println("You collected a coin!")
 				time.Sleep(200 * time.Millisecond)
+			case stair.StairGem:
+				g.Gems++
+				g.Output.Println("You collected a gem!")
+				time.Sleep(200 * time.Millisecond)
+			default:
+				points := 1
+				if g.DoublePointsTurns > 0 {
+					points = 2
+				}
+				g.Player.Score += points
+				g.Output.Printf("Good jump! +%d\n", points)
+				time.Sleep(200 * time.Millisecond)
+			}
+			if g.DoublePointsTurns > 0 {
+				g.DoublePointsTurns--
+			}
+			if g.SlowTimeTurns > 0 {
+				g.SlowTimeTurns--
 			}
 		} else {
 			g.Output.Printf("Oops! The stair was to the %s. Game over, %s! Final score: %d\n", nextDir, g.Player.Name, g.Player.Score)
@@ -179,24 +244,34 @@ func (g *Game) StartGame() {
 	}
 }
 
-// generateNextStair randomly picks the next stair direction and type, and returns the stair, its direction, and rendered lines.
-func generateNextStair() (*stair.Stair, string, []string) {
+// generateNextStairWithPowerups randomly picks the next stair direction and type, and returns the stair, its direction, and rendered lines.
+func generateNextStairWithPowerups() (*stair.Stair, string, []string) {
 	directions := []string{"left", "right"}
 	dir := directions[rand.Intn(2)]
-	// 50% normal, 10% falling, 10% spiked, 20% reverse, 10% super
+	// 60% normal, 5% falling, 5% spiked, 5% reverse, 3% super, 3% slowtime, 2% double, 5% shield, 5% coin, 2% gem
 	typeRoll := rand.Intn(100)
 	var stairType string
 	switch {
-	case typeRoll < 50:
-		stairType = stair.StairNormal
 	case typeRoll < 60:
+		stairType = stair.StairNormal
+	case typeRoll < 65:
 		stairType = stair.StairFalling
 	case typeRoll < 70:
 		stairType = stair.StairSpiked
-	case typeRoll < 90:
+	case typeRoll < 75:
 		stairType = stair.StairReverse
-	default:
+	case typeRoll < 78:
 		stairType = stair.StairSuper
+	case typeRoll < 81:
+		stairType = stair.StairSlowTime
+	case typeRoll < 83:
+		stairType = stair.StairDouble
+	case typeRoll < 88:
+		stairType = stair.StairShield
+	case typeRoll < 93:
+		stairType = stair.StairCoin
+	default:
+		stairType = stair.StairGem
 	}
 	st := stair.NewStair(dir, stairType)
 	if dir == "left" {
@@ -208,7 +283,8 @@ func generateNextStair() (*stair.Stair, string, []string) {
 // renderFrame builds the frame for the current step, padding with blank lines and adding the stair.
 func (g *Game) renderFrame(frameHeight int, blankLine string, nextStairLines []string) []string {
 	frame := make([]string, 0, frameHeight)
-	for len(frame) < frameHeight-9 {
+	// Reduce the number of blank lines to bring the character closer to the title
+	for len(frame) < frameHeight-13 {
 		frame = append(frame, blankLine)
 	}
 	frame = append(frame, nextStairLines...)
@@ -255,10 +331,10 @@ func getNextDirectionStair(stairs []*stair.Stair, i int, directions []string) st
 // getTimeLimit returns the time limit based on the score.
 func getTimeLimit(score int) time.Duration {
 	// Base time in seconds (e.g., 10s at score 0)
-	baseTime := 5.0
+	baseTime := 10.0
 
 	// Time reduction per score point
-	reductionPerPoint := 0.5
+	reductionPerPoint := 0.1
 
 	// Calculate reduced time
 	reducedTime := baseTime - (float64(score) * reductionPerPoint)
