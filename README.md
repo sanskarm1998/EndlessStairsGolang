@@ -4,7 +4,7 @@ Endless Stairs is a terminal-based game written in Go. Jump left or right to cli
 
 ## How to Play
 - Use ←/→ arrow keys or l/r keys to jump to the next stair.
-- The next stair is shown above your character.
+- The next stair is shown beside your character.
 - The game gets faster as your score increases.
 - The game ends if you jump in the wrong direction or run out of time.
 - Your score, coins, gems, and time left are always shown at the top of the screen.
